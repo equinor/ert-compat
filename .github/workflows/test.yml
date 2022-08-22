@@ -1,0 +1,55 @@
+name: ert-compat
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+
+jobs:
+
+  build:
+
+    strategy:
+      matrix:
+        os: ['ubuntu-latest']
+        python-version: ['3.8']
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout commit locally
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install ert-compat and test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r test_requirements.txt
+          pip install .
+          python tests/test_ert_compat.py  # Only import statements
+
+      - name: Style
+        run: |
+          flake8 src --ignore=F401,E402 --max-line-length 88
+          isort --check --profile=black src tests
+          pylint src --disable=missing-docstring,wrong-import-order,wrong-import-position
+          pylint tests --disable=missing-docstring,unused-import
+
+      - name: Test deprecated subscript
+        run: |
+          git clone https://github.com/equinor/subscript.git
+          pushd subscript
+          git checkout v0.16.2
+          pip install -r test_requirements.txt
+          pip install .
+          # Assert that pylint does not complain about any import errors:
+          ! pylint src tests --disable=all --enable=import-error | grep Unable
+          pytest tests  # Mostly only ERT integration tests are interesting
+          popd
